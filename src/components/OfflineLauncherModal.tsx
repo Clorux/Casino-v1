@@ -1,10 +1,11 @@
-import React, { useState } from 'react';
-import { Check, Copy, Download, Terminal, X } from 'lucide-react';
+import React, { useRef, useState } from 'react';
+import { Check, Copy, Download, Terminal, Upload, X } from 'lucide-react';
 
 interface OfflineLauncherModalProps {
   open: boolean;
   onClose: () => void;
   onExportSave: () => void;
+  onImportSave: (jsonText: string) => { ok: boolean; message: string };
 }
 
 const LAUNCH_COMMANDS = [
@@ -42,8 +43,11 @@ export const OfflineLauncherModal: React.FC<OfflineLauncherModalProps> = ({
   open,
   onClose,
   onExportSave,
+  onImportSave,
 }) => {
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [importNotice, setImportNotice] = useState<{ ok: boolean; message: string } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   if (!open) return null;
 
@@ -51,6 +55,19 @@ export const OfflineLauncherModal: React.FC<OfflineLauncherModalProps> = ({
     navigator.clipboard?.writeText(text).catch(() => {});
     setCopiedId(id);
     window.setTimeout(() => setCopiedId(null), 1600);
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = typeof reader.result === 'string' ? reader.result : '';
+      const res = onImportSave(text);
+      setImportNotice(res);
+    };
+    reader.readAsText(file);
+    e.target.value = '';
   };
 
   return (
@@ -131,15 +148,45 @@ export const OfflineLauncherModal: React.FC<OfflineLauncherModalProps> = ({
           ))}
         </div>
 
-        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
-          <button
-            type="button"
-            onClick={onExportSave}
-            className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#171E28] px-4 py-2 text-xs font-semibold text-slate-100 hover:border-[#D4AF37]"
+        {importNotice && (
+          <div
+            className={`mt-4 rounded-lg border px-3 py-2 text-xs ${
+              importNotice.ok
+                ? 'border-emerald-500/50 bg-emerald-950/50 text-emerald-300'
+                : 'border-rose-500/50 bg-rose-950/50 text-rose-300'
+            }`}
           >
-            <Download className="h-4 w-4 text-[#D4AF37]" aria-hidden="true" />
-            <span>Export Offline Bankroll &amp; ML Save (JSON)</span>
-          </button>
+            {importNotice.message}
+          </div>
+        )}
+
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3 border-t border-slate-800 pt-4">
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={onExportSave}
+              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#171E28] px-4 py-2 text-xs font-semibold text-slate-100 hover:border-[#D4AF37]"
+            >
+              <Download className="h-4 w-4 text-[#D4AF37]" aria-hidden="true" />
+              <span>Export Save (JSON)</span>
+            </button>
+
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="application/json,.json"
+              onChange={handleFileChange}
+              className="hidden"
+            />
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="flex items-center gap-2 rounded-lg border border-slate-700 bg-[#171E28] px-4 py-2 text-xs font-semibold text-slate-100 hover:border-emerald-400"
+            >
+              <Upload className="h-4 w-4 text-emerald-400" aria-hidden="true" />
+              <span>Import Save</span>
+            </button>
+          </div>
 
           <button
             type="button"

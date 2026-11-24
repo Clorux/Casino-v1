@@ -80,64 +80,86 @@ export const HyperDice: React.FC<GameCommonProps> = ({
         </button>
       </div>
 
-      {/* Dice Arena */}
-      <div className="flex flex-col justify-between gap-8 rounded-xl border border-slate-800 bg-[#0A0E14] p-6 sm:p-8">
+      {/* Dramatic Dice Arena */}
+      <div
+        className={`flex flex-col justify-between gap-8 rounded-xl border p-6 transition-all duration-300 sm:p-8 ${
+          lastRoll?.won
+            ? 'border-emerald-400/70 bg-[#081511] shadow-[inset_0_0_70px_rgba(16,185,129,0.16)]'
+            : lastRoll && !lastRoll.won
+            ? 'border-rose-500/45 bg-[#150A0E] shadow-[inset_0_0_60px_rgba(244,63,94,0.12)]'
+            : 'border-slate-800 bg-[#0A0E14]'
+        }`}
+      >
         {/* Big Result Readout */}
         <div className="flex flex-col items-center text-center">
-          <div className="text-xs font-medium text-slate-400">
+          <div className="text-xs font-semibold tracking-wider text-slate-300">
             {lastRoll
               ? lastRoll.won
-                ? `Hit! Paid $${lastRoll.payout.toFixed(2)}`
+                ? `PRECISION HIT · PAID $${lastRoll.payout.toFixed(2)}`
                 : lastRoll.wasNearMiss
-                ? 'Razor-thin near miss!'
-                : 'Missed target range'
-              : 'Ready to roll'}
+                ? 'RAZOR-THIN NEAR MISS!'
+                : 'MISSED TARGET RANGE'
+              : 'SLIDE TARGET & ROLL'}
           </div>
           <div
-            className={`font-mono-num mt-2 text-6xl font-bold tracking-tight sm:text-7xl ${
+            className={`font-mono-num mt-2 text-6xl font-bold tracking-tight transition-colors duration-200 sm:text-7xl ${
               !lastRoll
-                ? 'text-slate-200'
+                ? 'text-slate-100'
                 : lastRoll.won
-                ? 'text-emerald-400'
-                : 'text-rose-400'
+                ? 'text-emerald-300 drop-shadow-[0_0_24px_rgba(52,211,153,0.45)]'
+                : 'text-rose-400 drop-shadow-[0_0_20px_rgba(244,63,94,0.38)]'
             }`}
           >
             {lastRoll ? lastRoll.roll.toFixed(2) : '50.00'}
           </div>
         </div>
 
-        {/* Visual Probability Bar */}
-        <div className="mx-auto w-full max-w-2xl">
-          <div className="relative h-12 w-full rounded-xl border border-slate-800 bg-[#11161D] p-2">
-            <div className="relative h-full w-full overflow-hidden rounded-lg bg-slate-800">
-              {/* Red/Emerald range split */}
+        {/* Dramatic Visual Probability Slide Track */}
+        <div className="mx-auto w-full max-w-2xl pt-6">
+          <div className="relative h-14 w-full rounded-xl border border-[#D4AF37]/35 bg-[#11161D] p-2 shadow-[inset_0_2px_16px_rgba(0,0,0,0.85)]">
+            <div className="relative h-full w-full overflow-hidden rounded-lg bg-slate-900">
+              {/* Red/Emerald range split with glowing edge */}
               <div
                 className={`absolute inset-y-0 left-0 transition-all duration-150 ${
-                  direction === 'under' ? 'bg-emerald-600/80' : 'bg-rose-800/75'
+                  direction === 'under'
+                    ? 'bg-gradient-to-r from-emerald-700 via-emerald-500 to-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.5)]'
+                    : 'bg-gradient-to-r from-rose-950 via-rose-800 to-rose-600'
                 }`}
                 style={{ width: `${target}%` }}
               />
               <div
                 className={`absolute inset-y-0 right-0 transition-all duration-150 ${
-                  direction === 'over' ? 'bg-emerald-600/80' : 'bg-rose-800/75'
+                  direction === 'over'
+                    ? 'bg-gradient-to-l from-emerald-700 via-emerald-500 to-emerald-400 shadow-[0_0_24px_rgba(16,185,129,0.5)]'
+                    : 'bg-gradient-to-l from-rose-950 via-rose-800 to-rose-600'
                 }`}
                 style={{ width: `${100 - target}%` }}
               />
+              {/* Glowing golden divider thumb on the rail */}
+              <div
+                className="pointer-events-none absolute inset-y-0 w-1 -translate-x-1/2 bg-[#FDE047] shadow-[0_0_16px_#FDE047]"
+                style={{ left: `${target}%` }}
+              />
             </div>
 
-            {/* Landed roll marker */}
+            {/* Sliding landed roll marker */}
             {lastRoll && (
               <div
-                className="pointer-events-none absolute -top-9 -translate-x-1/2 transition-all duration-200"
+                className="pointer-events-none absolute -top-10 -translate-x-1/2 transition-all duration-300 ease-out"
                 style={{ left: `${Math.min(97, Math.max(3, lastRoll.roll))}%` }}
               >
                 <div
-                  className={`font-mono-num rounded px-2 py-0.5 text-xs font-bold shadow ${
-                    lastRoll.won ? 'bg-emerald-400 text-[#071510]' : 'bg-rose-500 text-white'
+                  className={`font-mono-num rounded-md px-2.5 py-1 text-xs font-bold shadow-lg ${
+                    lastRoll.won
+                      ? 'bg-emerald-400 text-[#071510] shadow-emerald-500/40'
+                      : 'bg-rose-500 text-white shadow-rose-500/40'
                   }`}
                 >
                   {lastRoll.roll.toFixed(2)}
                 </div>
+                <div
+                  className={`mx-auto h-2 w-0.5 ${lastRoll.won ? 'bg-emerald-400' : 'bg-rose-500'}`}
+                />
               </div>
             )}
           </div>
@@ -150,10 +172,10 @@ export const HyperDice: React.FC<GameCommonProps> = ({
             step={1}
             value={target}
             onChange={(e) => setTarget(Number(e.target.value))}
-            className="mt-4 h-2 w-full cursor-pointer accent-[#D4AF37]"
+            className="mt-4 h-2.5 w-full cursor-pointer accent-[#D4AF37]"
           />
 
-          <div className="mt-2 flex justify-between font-mono-num text-[11px] text-slate-500">
+          <div className="mt-2 flex justify-between font-mono-num text-[11px] text-slate-400">
             <span>0</span>
             <span>25</span>
             <span>50</span>

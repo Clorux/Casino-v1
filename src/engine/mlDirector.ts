@@ -1,4 +1,15 @@
-export type DirectorMode = 'off' | 'balanced' | 'adaptive_ml' | 'dopamine_max';
+import type {
+  FutureAdaptationProfile,
+  RealTimeAnalysis,
+} from './behavioralAnalyzer';
+import type { HouseMindState } from './houseMind';
+
+export type DirectorMode =
+  | 'off'
+  | 'balanced'
+  | 'adaptive_ml'
+  | 'dopamine_max'
+  | 'realistic_house';
 
 export type BanditArmId =
   | 'FLOW_DRIP'
@@ -29,6 +40,7 @@ export interface DirectorModifiers {
   comebackActive: boolean;
   markovState: 'COLD' | 'NEUTRAL' | 'WARM' | 'FEVER';
   expectedRtp: number; // Displayed live target RTP %
+  ldwIntensity?: number; // 0..0.45 Losses Disguised as Wins probability (Realistic Mode)
 }
 
 export interface RoundTelemetry {
@@ -219,16 +231,24 @@ function dot(a: number[], b: number[]): number {
   return sum;
 }
 
+export interface BehavioralDirectorInput {
+  realtime: RealTimeAnalysis;
+  comprehensive: FutureAdaptationProfile;
+  currentGameId?: string;
+}
+
 /**
  * Selects optimal manipulation arm using hybrid Contextual LinUCB + Thompson Sampling
- * and computes live probability modifiers for any casino game.
+ * and computes live probability modifiers fused with Dual-System Behavioral Intelligence.
  */
 export function computeDirectorModifiers(
   state: DirectorState,
   balance: number,
   bet: number,
   relics: RelicBonuses = { cascadeStartBonus: 0, pityReduction: 0, scatterBoost: 0, cashbackRate: 0 },
-  rng: () => number = Math.random
+  rng: () => number = Math.random,
+  behavioral?: BehavioralDirectorInput,
+  houseMind?: HouseMindState
 ): { modifiers: DirectorModifiers; scoredArms: Record<BanditArmId, number> } {
   const scoredArms = {} as Record<BanditArmId, number>;
 
@@ -252,8 +272,49 @@ export function computeDirectorModifiers(
     };
   }
 
+  // REALISTIC HOUSE MODE: Classical ML Adversarial Opponent aiming to grind player to $0
+  // while strategically releasing anti-quit lifelines & baiting player theories.
+  if (state.mode === 'realistic_house' && houseMind) {
+    const phaseToArm: Record<HouseMindState['phase'], BanditArmId> = {
+      HONEYMOON_HOOK: 'HOT_STREAK',
+      BAIT_THEORY: 'FLOW_DRIP',
+      SLOW_BLEED: 'TEASE_BUILD',
+      LIFELINE_TEASE: 'COMEBACK_SURGE',
+      PREDATOR_HARVEST: 'TEASE_BUILD',
+    };
+    const activeArm = phaseToArm[houseMind.phase];
+    for (const id of Object.keys(state.arms) as BanditArmId[]) {
+      scoredArms[id] = id === activeArm ? 1 : 0.2;
+    }
+
+    const isLifeline = houseMind.phase === 'LIFELINE_TEASE';
+    const isHarvest = houseMind.phase === 'PREDATOR_HARVEST' || houseMind.phase === 'SLOW_BLEED';
+
+    return {
+      modifiers: {
+        activeArm,
+        winBias: Math.max(-0.32, Math.min(0.18, houseMind.adversarialWinBias)),
+        bonusBoost: Math.max(
+          0.55,
+          Math.min(1.85, houseMind.adversarialBonusBoost + relics.scatterBoost * 0.5)
+        ),
+        nearMissRate: Math.max(0.18, Math.min(0.68, houseMind.adversarialNearMissRate)),
+        cascadeBoost: isHarvest ? 0.02 : 0.14,
+        pityActive: isLifeline,
+        comebackActive: isLifeline,
+        markovState: isHarvest ? 'COLD' : isLifeline ? 'WARM' : state.markovState,
+        expectedRtp: houseMind.targetEffectiveRtp,
+        ldwIntensity: houseMind.ldwIntensity ?? 0,
+      },
+      scoredArms,
+    };
+  }
+
   const features = extractContextFeatures(state, balance, bet);
-  const effectivePityThreshold = Math.max(2, state.pityThreshold - relics.pityReduction);
+  const adaptedPity = behavioral
+    ? Math.min(state.pityThreshold, behavioral.comprehensive.adaptedPityThreshold)
+    : state.pityThreshold;
+  const effectivePityThreshold = Math.max(2, adaptedPity - relics.pityReduction);
   const pityActive = state.dryStreak >= effectivePityThreshold;
   const lowBankrollRatio = balance / Math.max(1, Math.max(state.buyIn, state.peakBalance * 0.75));
   const comebackActive = lowBankrollRatio <= 0.22 && balance > 0;
@@ -275,6 +336,20 @@ export function computeDirectorModifiers(
     if (state.mode === 'dopamine_max' && (id === 'TEASE_BUILD' || id === 'JACKPOT_SPIKE')) {
       heuristicNudge += 0.12;
     }
+    if (behavioral) {
+      if (behavioral.realtime.microState === 'RELOAD_WELCOME' && id === 'HOT_STREAK') {
+        heuristicNudge += 0.3;
+      }
+      if (behavioral.realtime.microState === 'FATIGUE_DRIFT' && id === 'TEASE_BUILD') {
+        heuristicNudge += 0.28;
+      }
+      if (behavioral.realtime.microState === 'TILT_CHASE' && id === 'JACKPOT_SPIKE') {
+        heuristicNudge += 0.25;
+      }
+      if (behavioral.realtime.microState === 'BAILOUT_RISK' && id === 'COMEBACK_SURGE') {
+        heuristicNudge += 0.35;
+      }
+    }
 
     const score = 0.48 * tsSample + 0.38 * ((contextSignal + 1) / 2) + ucbExploration + heuristicNudge;
     scoredArms[id] = Number(score.toFixed(4));
@@ -288,7 +363,10 @@ export function computeDirectorModifiers(
     state.mode === 'balanced' ? 0.55 : state.mode === 'adaptive_ml' ? 1.0 : 1.35;
   const volBonusScale =
     state.volatility === 'low' ? 0.85 : state.volatility === 'medium' ? 1.0 : 1.28;
-  const rtpDelta = (state.targetRtp - 96.5) / 100; // e.g., +0.06 for 102.5%
+  const effectiveRtpTarget = behavioral
+    ? Math.max(state.targetRtp, behavioral.comprehensive.adaptedRtpFloor)
+    : state.targetRtp;
+  const rtpDelta = (effectiveRtpTarget - 96.5) / 100;
 
   let winBias = rtpDelta * 0.55;
   let bonusBoost = 1.0 + relics.scatterBoost;
@@ -328,6 +406,20 @@ export function computeDirectorModifiers(
       break;
   }
 
+  // Fuse System 1 (Real-Time) and System 2 (Comprehensive Future Profile) behavioral adjustments
+  if (behavioral) {
+    winBias += behavioral.realtime.winBiasDelta * modeScale;
+    bonusBoost += behavioral.realtime.bonusDelta * modeScale;
+    nearMissRate = (nearMissRate + behavioral.realtime.teaseDelta) * behavioral.comprehensive.adaptedTeaseMultiplier;
+    cascadeBoost *= behavioral.comprehensive.adaptedCascadeMultiplier;
+    if (
+      behavioral.currentGameId &&
+      behavioral.comprehensive.favoriteGameId === behavioral.currentGameId
+    ) {
+      winBias += behavioral.comprehensive.favoriteGameBonusBias * modeScale;
+    }
+  }
+
   if (pityActive) {
     const excessDry = Math.min(6, state.dryStreak - effectivePityThreshold + 1);
     winBias += 0.035 * excessDry * modeScale;
@@ -339,12 +431,22 @@ export function computeDirectorModifiers(
   }
 
   // Clamp modifiers to sensible, dramatic ranges
-  winBias = Math.min(0.28, Math.max(-0.04, winBias));
-  bonusBoost = Math.min(2.6, Math.max(0.85, bonusBoost));
-  cascadeBoost = Math.min(0.35, Math.max(0, cascadeBoost));
+  winBias = Math.min(0.32, Math.max(-0.04, winBias));
+  bonusBoost = Math.min(2.8, Math.max(0.85, bonusBoost));
+  nearMissRate = Math.min(0.62, Math.max(0.05, nearMissRate));
+  cascadeBoost = Math.min(0.42, Math.max(0, cascadeBoost));
 
   const expectedRtp = Number(
-    Math.min(118, Math.max(92, state.targetRtp + (comebackActive ? 4.5 : 0) + (pityActive ? 3.2 : 0))).toFixed(1)
+    Math.min(
+      122,
+      Math.max(
+        92,
+        effectiveRtpTarget +
+          (comebackActive ? 4.5 : 0) +
+          (pityActive ? 3.2 : 0) +
+          (behavioral?.realtime.recentDepositBoostActive ? 2.5 : 0)
+      )
+    ).toFixed(1)
   );
 
   return {

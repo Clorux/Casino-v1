@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bomb, Gem } from 'lucide-react';
+import { Bomb, Gem, Shuffle } from 'lucide-react';
 import type { GameCommonProps } from '../types/casino';
 import {
   applyDirectorMinesProtection,
@@ -90,7 +90,7 @@ export const VaultMines: React.FC<GameCommonProps> = ({
         gameId: 'mines',
         bet: activeBet,
         payout,
-        celebrateTier: mult >= 20 ? 'MEGA' : mult >= 8 ? 'SUPER' : 'BIG',
+        celebrateTier: mult >= 30 ? 'JACKPOT' : mult >= 15 ? 'MEGA' : mult >= 8 ? 'SUPER' : 'BIG',
         celebrateLabel: 'VAULT MINES FULL CLEAR',
       });
     } else {
@@ -98,19 +98,41 @@ export const VaultMines: React.FC<GameCommonProps> = ({
     }
   };
 
+  const pickRandomTile = () => {
+    if (!active) return;
+    const unrevealed = revealed
+      .map((isRev, idx) => (isRev ? -1 : idx))
+      .filter((idx) => idx >= 0);
+    if (unrevealed.length === 0) return;
+    const pick = unrevealed[Math.floor(Math.random() * unrevealed.length)];
+    revealTile(pick);
+  };
+
   const cashOut = () => {
     if (!active || safeFound === 0) return;
     setActive(false);
     setShowAll(true);
     const payout = currentPayout;
-    audioEngine.playWinFanfare(currentMult >= 6 ? 'SUPER' : currentMult >= 2.5 ? 'BIG' : 'WIN');
+    const celebrateTier =
+      currentMult >= 30
+        ? 'JACKPOT'
+        : currentMult >= 15
+        ? 'MEGA'
+        : currentMult >= 6
+        ? 'SUPER'
+        : currentMult >= 3
+        ? 'BIG'
+        : undefined;
+    if (!celebrateTier) {
+      audioEngine.playWinFanfare('WIN');
+    }
     if (currentMult >= 2.5) onTriggerBurst(currentMult >= 8 ? 'heavy' : 'light');
     setStatus(`Cashed out $${payout.toFixed(2)} at ${currentMult}x!`);
     onSettleRound({
       gameId: 'mines',
       bet: activeBet,
       payout,
-      celebrateTier: currentMult >= 15 ? 'MEGA' : currentMult >= 6 ? 'SUPER' : currentMult >= 3 ? 'BIG' : undefined,
+      celebrateTier,
       celebrateLabel: 'VAULT MINES CASHOUT',
     });
   };
@@ -205,6 +227,17 @@ export const VaultMines: React.FC<GameCommonProps> = ({
                 {safeFound} / {25 - mineCount}
               </div>
             </div>
+
+            {active && (
+              <button
+                type="button"
+                onClick={pickRandomTile}
+                className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[#D4AF37]/60 bg-[#D4AF37]/12 py-2 text-xs font-bold text-[#F9E7A8] hover:bg-[#D4AF37]/22"
+              >
+                <Shuffle className="h-3.5 w-3.5" aria-hidden="true" />
+                <span>Pick Random Tile</span>
+              </button>
+            )}
           </div>
 
           <p className="mt-5 border-t border-slate-800 pt-3 text-xs leading-relaxed text-slate-300">

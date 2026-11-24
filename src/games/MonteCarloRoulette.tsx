@@ -8,6 +8,7 @@ import {
   type RouletteBetType,
 } from '../engine/gameEngines';
 import { audioEngine } from '../engine/audioEngine';
+import feltTextureUrl from '../assets/images/felt_table_texture_1795386776893.jpg';
 
 const CHIP_VALUES = [5, 10, 25, 100, 250];
 
@@ -30,6 +31,8 @@ export const MonteCarloRoulette: React.FC<GameCommonProps> = ({
   const wheelAngleRef = useRef(0);
   const ballAngleRef = useRef(0);
   const ballRadiusRef = useRef(102);
+  const rafRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
 
   const totalStaked = bets.reduce((s, b) => s + b.amount, 0);
 
@@ -122,7 +125,12 @@ export const MonteCarloRoulette: React.FC<GameCommonProps> = ({
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     drawWheel(wheelAngleRef.current, ballAngleRef.current, ballRadiusRef.current);
+    return () => {
+      mountedRef.current = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
   const addBet = (id: string, label: string, type: RouletteBetType) => {
@@ -167,6 +175,7 @@ export const MonteCarloRoulette: React.FC<GameCommonProps> = ({
     let lastTickIdx = -1;
 
     const animate = (now: number) => {
+      if (!mountedRef.current) return;
       const p = Math.min(1, (now - t0) / duration);
       const ease = 1 - Math.pow(1 - p, 3.4);
 
@@ -186,19 +195,33 @@ export const MonteCarloRoulette: React.FC<GameCommonProps> = ({
       }
 
       if (p < 1) {
-        requestAnimationFrame(animate);
+        rafRef.current = requestAnimationFrame(animate);
       } else {
+        rafRef.current = null;
         setSpinning(false);
         setLanded(res.landed);
         setHistory((prev) => [res.landed, ...prev.slice(0, 11)]);
         setBets([]);
 
         const mult = totalStaked > 0 ? res.totalPayout / totalStaked : 0;
+        const celebrateTier =
+          mult >= 35
+            ? 'JACKPOT'
+            : mult >= 20
+            ? 'MEGA'
+            : mult >= 10
+            ? 'SUPER'
+            : mult >= 5
+            ? 'BIG'
+            : undefined;
+
         if (res.totalPayout > 0) {
           setMessage(`Landed ${res.landed} (${res.color.toUpperCase()}) — Won $${res.totalPayout.toFixed(2)}!`);
+          if (!celebrateTier) audioEngine.playWinFanfare('WIN');
           if (mult >= 3) onTriggerBurst(mult >= 10 ? 'heavy' : 'light');
         } else {
           setMessage(`Landed ${res.landed} (${res.color.toUpperCase()}). Place bets for next spin.`);
+          audioEngine.playBust();
         }
 
         onSettleRound({
@@ -206,13 +229,13 @@ export const MonteCarloRoulette: React.FC<GameCommonProps> = ({
           bet: totalStaked,
           payout: res.totalPayout,
           wasNearMiss: res.wasNearMiss,
-          celebrateTier: mult >= 20 ? 'MEGA' : mult >= 10 ? 'SUPER' : mult >= 5 ? 'BIG' : undefined,
+          celebrateTier,
           celebrateLabel: 'MONTE CARLO ROULETTE',
         });
       }
     };
 
-    requestAnimationFrame(animate);
+    rafRef.current = requestAnimationFrame(animate);
   };
 
   return (
@@ -249,7 +272,7 @@ export const MonteCarloRoulette: React.FC<GameCommonProps> = ({
       <div
         className="relative grid grid-cols-1 gap-6 overflow-hidden rounded-xl border border-[#D4AF37]/30 bg-[#0D3B2A] p-5 lg:grid-cols-[280px_1fr]"
         style={{
-          backgroundImage: `linear-gradient(rgba(9,24,18,0.78), rgba(9,24,18,0.88)), url('/src/assets/images/felt_table_texture_1795386776893.jpg')`,
+          backgroundImage: `linear-gradient(rgba(9,24,18,0.78), rgba(9,24,18,0.88)), url(${feltTextureUrl})`,
           backgroundSize: 'cover',
         }}
       >
@@ -398,10 +421,24 @@ export const MonteCarloRoulette: React.FC<GameCommonProps> = ({
           </button>
           <button
             type="button"
+            disabled={spinning || bets.length === 0 || totalStaked * 2 > balance}
+            onClick={() => {
+              audioEngine.playChipPlace();
+              setBets((prev) => prev.map((b) => ({ ...b, amount: b.amount * 2 })));
+            }}
+            className="rounded-lg border border-slate-700 bg-[#171E28] px-3.5 py-2.5 text-xs font-semibold text-[#F9E7A8] hover:border-[#D4AF37] disabled:opacity-40"
+          >
+            2x
+          </button>
+          <button
+            type="button"
             disabled={spinning || lastBets.length === 0}
             onClick={() => {
               const sum = lastBets.reduce((s, b) => s + b.amount, 0);
-              if (sum <= balance) setBets(lastBets);
+              if (sum <= balance) {
+                audioEngine.playChipPlace();
+                setBets(lastBets);
+              }
             }}
             className="rounded-lg border border-slate-700 bg-[#171E28] px-4 py-2.5 text-xs font-semibold text-slate-200 hover:border-slate-500 disabled:opacity-40"
           >

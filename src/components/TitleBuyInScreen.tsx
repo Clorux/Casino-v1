@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import type { DirectorMode } from '../engine/mlDirector';
+import salonBackdropUrl from '../assets/images/casino_salon_backdrop_1795386777842.jpg';
 
 interface TitleBuyInScreenProps {
   savedBalance: number | null;
@@ -8,9 +9,15 @@ interface TitleBuyInScreenProps {
 
 const PRESET_BUYINS = [250, 1000, 5000, 25000];
 
-const DIRECTOR_MODES: Array<{ id: DirectorMode; label: string; note: string }> = [
-  { id: 'adaptive_ml', label: 'Adaptive ML', note: 'Contextual bandit optimizes rhythm & comebacks' },
-  { id: 'dopamine_max', label: 'Dopamine Max', note: 'High anticipation teases, cascades & pity bursts' },
+const DIRECTOR_MODES: Array<{ id: DirectorMode; label: string; note: string; featured?: boolean }> = [
+  {
+    id: 'realistic_house',
+    label: 'Realistic House (Battle)',
+    note: 'Adversarial House Mind with $50k vault · reads your timing & toggles · tries to grind you to $0',
+    featured: true,
+  },
+  { id: 'adaptive_ml', label: 'Adaptive ML', note: 'Contextual bandit + dual behavioral AI' },
+  { id: 'dopamine_max', label: 'Dopamine Max', note: 'High anticipation teases, cascades & fever bursts' },
   { id: 'balanced', label: 'Balanced', note: 'Gentle bad-luck protection with classic feel' },
   { id: 'off', label: 'Strict RNG', note: 'Pure unregulated house math with zero nudges' },
 ];
@@ -20,7 +27,7 @@ export const TitleBuyInScreen: React.FC<TitleBuyInScreenProps> = ({
   onStartSession,
 }) => {
   const [buyInInput, setBuyInInput] = useState<string>('1000');
-  const [selectedMode, setSelectedMode] = useState<DirectorMode>('adaptive_ml');
+  const [selectedMode, setSelectedMode] = useState<DirectorMode>('realistic_house');
   const [imgError, setImgError] = useState(false);
 
   const parsedBuyIn = Math.max(10, Math.min(1000000, Number(buyInInput) || 1000));
@@ -49,7 +56,7 @@ export const TitleBuyInScreen: React.FC<TitleBuyInScreenProps> = ({
       {/* Illustrated Monte Carlo Salon Key-Art Backdrop */}
       {!imgError && (
         <img
-          src="/src/assets/images/casino_salon_backdrop_1795386777842.jpg"
+          src={salonBackdropUrl}
           alt="Private Monte Carlo casino salon interior"
           referrerPolicy="no-referrer"
           onError={() => setImgError(true)}
@@ -101,7 +108,7 @@ export const TitleBuyInScreen: React.FC<TitleBuyInScreenProps> = ({
                 Velvet Vault
               </h1>
               <p className="mt-0.5 text-sm text-slate-300">
-                Offline Monte Carlo Floor · 8 Games · Adaptive ML Director
+                Offline Monte Carlo Floor · 16 Games · Dual Behavioral AI
               </p>
             </div>
           </div>
@@ -165,13 +172,22 @@ export const TitleBuyInScreen: React.FC<TitleBuyInScreenProps> = ({
                     key={m.id}
                     type="button"
                     onClick={() => setSelectedMode(m.id)}
-                    className={`rounded-lg border px-3.5 py-2.5 text-left transition-colors ${
+                    className={`${m.featured ? 'col-span-2' : ''} rounded-lg border px-3.5 py-2.5 text-left transition-colors ${
                       selectedMode === m.id
-                        ? 'border-[#D4AF37] bg-[#D4AF37]/12 text-[#F9E7A8]'
+                        ? m.featured
+                          ? 'border-rose-400/90 bg-rose-950/35 text-[#FEF08A]'
+                          : 'border-[#D4AF37] bg-[#D4AF37]/12 text-[#F9E7A8]'
                         : 'border-slate-800 bg-[#0D1218] text-slate-300 hover:border-slate-600'
                     }`}
                   >
-                    <div className="text-xs font-semibold">{m.label}</div>
+                    <div className="flex items-center justify-between gap-2 text-xs font-semibold">
+                      <span>{m.label}</span>
+                      {m.featured && (
+                        <span className="font-mono-num text-[10px] font-bold uppercase tracking-wider text-rose-300">
+                          House vs You
+                        </span>
+                      )}
+                    </div>
                     <div className="mt-0.5 text-[11px] leading-snug text-slate-400">{m.note}</div>
                   </button>
                 ))}
@@ -207,7 +223,7 @@ export const TitleBuyInScreen: React.FC<TitleBuyInScreenProps> = ({
           </section>
 
           <p className="mt-6 text-xs text-slate-400">
-            Enter / Space Start · 8 Offline Games · PowerShell, Terminal &amp; Termux Ready
+            Enter / Space Start · 14 Offline Games · PowerShell, Terminal &amp; Termux Ready
           </p>
         </div>
       </main>

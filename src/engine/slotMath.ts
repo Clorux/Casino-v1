@@ -315,8 +315,7 @@ export function resolveThunderfallSpin(
     pickFromStrip(strip, rng),
   ]);
 
-  // Director Comeback / Pity alignment boost: if winning probability should be elevated
-  // and initial grid has no win, softly align a 3-of-a-kind on middle/top line.
+  // Director Comeback / Pity alignment boost OR Adversarial House Harvest squeeze
   const initialEval = evaluateSlotGrid(grid);
   if (initialEval.wins.length === 0 && initialEval.scatterCount < 3) {
     if (modifiers.winBias > 0 && rng() < modifiers.winBias * 1.45) {
@@ -332,6 +331,30 @@ export function resolveThunderfallSpin(
       if (rng() < 0.25 + modifiers.winBias) {
         grid[3][row] = chosen;
       }
+    } else if ((modifiers.ldwIntensity ?? 0) > 0 && rng() < (modifiers.ldwIntensity ?? 0) * 0.65) {
+      // Losses Disguised as Wins (LDW): inject a sub-1x 3-of-a-kind low-tier hit (~0.10x-0.35x bet)
+      // Lights up payline & chimes while net bankroll still bleeds
+      const ldwPool: SlotSymbolId[] = ['CLUB', 'SPADE', 'HEART'];
+      const chosen = ldwPool[Math.floor(rng() * ldwPool.length)];
+      const row = Math.floor(rng() * 3);
+      grid[0][row] = chosen;
+      grid[1][row] = chosen;
+      grid[2][row] = chosen;
+      if (grid[3][row] === chosen || grid[3][row] === 'WILD') {
+        grid[3][row] = ldwPool.find((s) => s !== chosen) ?? 'CLUB';
+      }
+    }
+  } else if (
+    (initialEval.wins.length > 0 || initialEval.scatterCount >= 3) &&
+    modifiers.winBias < 0 &&
+    rng() < Math.min(0.4, Math.abs(modifiers.winBias) * 1.45)
+  ) {
+    // House Harvest: disrupt reel 2 to turn a paying alignment into a stinging near-miss
+    const disruptPool: SlotSymbolId[] = ['SPADE', 'HEART', 'CLUB'];
+    for (let row = 0; row < 3; row++) {
+      const existing = grid[0][row];
+      const replacement = disruptPool.find((s) => s !== existing) ?? 'CLUB';
+      grid[2][row] = replacement;
     }
   }
 

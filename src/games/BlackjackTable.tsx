@@ -1,6 +1,7 @@
 import React, { useRef, useState } from 'react';
 import type { GameCommonProps } from '../types/casino';
 import {
+  applyBlackjackHouseBias,
   createShuffledShoe,
   evaluateBlackjackHand,
   resolveBlackjackOutcome,
@@ -8,13 +9,17 @@ import {
 } from '../engine/gameEngines';
 import { audioEngine } from '../engine/audioEngine';
 import { WagerBar } from '../components/WagerBar';
+import feltTextureUrl from '../assets/images/felt_table_texture_1795386776893.jpg';
 
 type BjPhase = 'IDLE' | 'PLAYER_TURN' | 'SETTLED';
 
-function CardView({ card, hidden = false }: { card: PlayingCard; hidden?: boolean }) {
+function CardView({ card, hidden = false, index = 0 }: { card: PlayingCard; hidden?: boolean; index?: number }) {
   if (hidden) {
     return (
-      <div className="flex h-28 w-20 items-center justify-center rounded-lg border-2 border-[#D4AF37]/70 bg-[#16202C] shadow-lg">
+      <div
+        style={{ animationDelay: `${index * 70}ms` }}
+        className="animate-card-deal flex h-28 w-20 items-center justify-center rounded-lg border-2 border-[#D4AF37]/70 bg-[#16202C] shadow-lg"
+      >
         <div className="h-20 w-12 rounded border border-[#D4AF37]/40 bg-[#0E151E]" />
       </div>
     );
@@ -22,7 +27,10 @@ function CardView({ card, hidden = false }: { card: PlayingCard; hidden?: boolea
 
   const isRed = card.suit === '♥' || card.suit === '♦';
   return (
-    <div className="flex h-28 w-20 flex-col justify-between rounded-lg border border-slate-300 bg-[#FAF9F6] p-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.45)]">
+    <div
+      style={{ animationDelay: `${index * 70}ms` }}
+      className="animate-card-deal flex h-28 w-20 flex-col justify-between rounded-lg border border-slate-300 bg-[#FAF9F6] p-2.5 shadow-[0_10px_24px_rgba(0,0,0,0.45)]"
+    >
       <div className={`font-mono-num text-base font-bold leading-none ${isRed ? 'text-rose-600' : 'text-slate-900'}`}>
         {card.rank}
         <span className="ml-0.5 text-sm">{card.suit}</span>
@@ -63,28 +71,20 @@ export const BlackjackTable: React.FC<GameCommonProps> = ({
 
   const finishHand = (pCards: PlayingCard[], dCards: PlayingCard[], stake: number) => {
     const finalDealer = [...dCards];
+    const playerTotal = evaluateBlackjackHand(pCards).total;
     while (evaluateBlackjackHand(finalDealer).total < 17) {
       const next = drawCard();
-      // Subtle Director comeback nudge: if player stood on 18-20 and comeback is active, avoid dealer miracle 21
-      if (
-        modifiers.comebackActive &&
-        evaluateBlackjackHand(finalDealer).total >= 12 &&
-        evaluateBlackjackHand([...finalDealer, next]).total === 21 &&
-        Math.random() < 0.35
-      ) {
-        finalDealer.push({ ...next, rank: '10' });
-      } else {
-        finalDealer.push(next);
-      }
+      const biasedCard = applyBlackjackHouseBias(finalDealer, next, playerTotal, modifiers);
+      finalDealer.push(biasedCard);
     }
 
     setDealerHand(finalDealer);
     setPhase('SETTLED');
 
     const { outcome, payout } = resolveBlackjackOutcome(pCards, finalDealer, stake);
+    const celebrateTier = outcome === 'BLACKJACK' ? 'BIG' : undefined;
     if (outcome === 'BLACKJACK') {
       setResultText(`Natural Blackjack 3:2! Paid $${payout.toFixed(2)}`);
-      audioEngine.playWinFanfare('BIG');
       onTriggerBurst('heavy');
     } else if (outcome === 'WIN') {
       setResultText(`Dealer busts or beaten — Won $${payout.toFixed(2)}!`);
@@ -103,7 +103,7 @@ export const BlackjackTable: React.FC<GameCommonProps> = ({
       bet: stake,
       payout,
       wasNearMiss: outcome === 'LOSE' && evaluateBlackjackHand(pCards).total === 20,
-      celebrateTier: outcome === 'BLACKJACK' && stake >= 100 ? 'BIG' : undefined,
+      celebrateTier,
       celebrateLabel: 'SALON BLACKJACK 21',
     });
   };
@@ -191,7 +191,7 @@ export const BlackjackTable: React.FC<GameCommonProps> = ({
       <div
         className="flex min-h-[380px] flex-col justify-between rounded-xl border border-[#D4AF37]/30 bg-[#0D3B2A] p-6 shadow-[inset_0_0_60px_rgba(0,0,0,0.65)]"
         style={{
-          backgroundImage: `linear-gradient(rgba(8,26,18,0.68), rgba(8,26,18,0.82)), url('/src/assets/images/felt_table_texture_1795386776893.jpg')`,
+          backgroundImage: `linear-gradient(rgba(8,26,18,0.68), rgba(8,26,18,0.82)), url(${feltTextureUrl})`,
           backgroundSize: 'cover',
         }}
       >
@@ -207,7 +207,7 @@ export const BlackjackTable: React.FC<GameCommonProps> = ({
               </div>
             ) : (
               dealerHand.map((card, i) => (
-                <CardView key={card.id} card={card} hidden={phase === 'PLAYER_TURN' && i === 1} />
+                <CardView key={`${card.id}-${i}`} card={card} index={i} hidden={phase === 'PLAYER_TURN' && i === 1} />
               ))
             )}
           </div>
@@ -226,7 +226,7 @@ export const BlackjackTable: React.FC<GameCommonProps> = ({
                 Player
               </div>
             ) : (
-              playerHand.map((card) => <CardView key={card.id} card={card} />)
+              playerHand.map((card, i) => <CardView key={`${card.id}-${i}`} card={card} index={i} />)
             )}
           </div>
           <div className="mt-3 text-xs font-semibold tracking-wider text-emerald-100">

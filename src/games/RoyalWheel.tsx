@@ -17,6 +17,8 @@ export const RoyalWheel: React.FC<GameCommonProps> = ({
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const angleRef = useRef(0);
+  const rafRef = useRef<number | null>(null);
+  const mountedRef = useRef(true);
 
   const drawWheel = (rot: number) => {
     const canvas = canvasRef.current;
@@ -108,7 +110,12 @@ export const RoyalWheel: React.FC<GameCommonProps> = ({
   };
 
   useEffect(() => {
+    mountedRef.current = true;
     drawWheel(angleRef.current);
+    return () => {
+      mountedRef.current = false;
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
   const spin = () => {
@@ -134,6 +141,7 @@ export const RoyalWheel: React.FC<GameCommonProps> = ({
     let lastSegTick = -1;
 
     const tick = (now: number) => {
+      if (!mountedRef.current) return;
       const p = Math.min(1, (now - t0) / duration);
       const ease = 1 - Math.pow(1 - p, 4.1);
       const cur = current + (targetRot - current) * ease;
@@ -147,14 +155,26 @@ export const RoyalWheel: React.FC<GameCommonProps> = ({
       }
 
       if (p < 1) {
-        requestAnimationFrame(tick);
+        rafRef.current = requestAnimationFrame(tick);
       } else {
+        rafRef.current = null;
         setSpinning(false);
         setLastResult({ label: res.segment.label, payout: res.payout });
+        const celebrateTier =
+          res.segment.multiplier >= 50
+            ? 'JACKPOT'
+            : res.segment.multiplier >= 25
+            ? 'MEGA'
+            : res.segment.multiplier >= 10
+            ? 'SUPER'
+            : res.segment.multiplier >= 5
+            ? 'BIG'
+            : undefined;
+
         if (res.payout > 0) {
-          audioEngine.playWinFanfare(
-            res.segment.multiplier >= 25 ? 'MEGA' : res.segment.multiplier >= 10 ? 'SUPER' : res.segment.multiplier >= 3 ? 'BIG' : 'WIN'
-          );
+          if (!celebrateTier) {
+            audioEngine.playWinFanfare('WIN');
+          }
           if (res.segment.multiplier >= 3) {
             onTriggerBurst(res.segment.multiplier >= 10 ? 'heavy' : 'light');
           }
@@ -166,20 +186,13 @@ export const RoyalWheel: React.FC<GameCommonProps> = ({
           bet: effectiveBet,
           payout: res.payout,
           wasNearMiss: res.wasNearMiss,
-          celebrateTier:
-            res.segment.multiplier >= 25
-              ? 'MEGA'
-              : res.segment.multiplier >= 10
-              ? 'SUPER'
-              : res.segment.multiplier >= 5
-              ? 'BIG'
-              : undefined,
+          celebrateTier,
           celebrateLabel: 'ROYAL WHEEL JACKPOT',
         });
       }
     };
 
-    requestAnimationFrame(tick);
+    rafRef.current = requestAnimationFrame(tick);
   };
 
   return (

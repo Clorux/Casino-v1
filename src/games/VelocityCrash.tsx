@@ -48,13 +48,25 @@ export const VelocityCrash: React.FC<GameCommonProps> = ({
     setPhase('CASHED_OUT');
     setCashedAt(atMult);
     setHistory((prev) => [s.targetCrash, ...prev.slice(0, 9)]);
-    audioEngine.playWinFanfare(atMult >= 8 ? 'SUPER' : atMult >= 3 ? 'BIG' : 'WIN');
+    const celebrateTier =
+      atMult >= 30
+        ? 'JACKPOT'
+        : atMult >= 15
+        ? 'MEGA'
+        : atMult >= 7
+        ? 'SUPER'
+        : atMult >= 3.5
+        ? 'BIG'
+        : undefined;
+    if (!celebrateTier) {
+      audioEngine.playWinFanfare('WIN');
+    }
     burstRef.current(atMult >= 4 ? 'heavy' : 'light');
     settleRef.current({
       gameId: 'crash',
       bet: s.activeBet,
       payout,
-      celebrateTier: atMult >= 15 ? 'MEGA' : atMult >= 7 ? 'SUPER' : atMult >= 3.5 ? 'BIG' : undefined,
+      celebrateTier,
       celebrateLabel: 'VELOCITY CRASH CASHOUT',
     });
   };
@@ -175,6 +187,18 @@ export const VelocityCrash: React.FC<GameCommonProps> = ({
     rafRef.current = requestAnimationFrame(draw);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      // Protect player bankroll if navigating away mid-flight by settling at current multiplier
+      const s = stateRef.current;
+      if (s.phase === 'FLYING') {
+        s.phase = 'CASHED_OUT';
+        const safePayout = Number((s.activeBet * Math.max(1, s.currentMult)).toFixed(2));
+        settleRef.current({
+          gameId: 'crash',
+          bet: s.activeBet,
+          payout: safePayout,
+          celebrateLabel: 'VELOCITY CRASH AUTO-PROTECT',
+        });
+      }
     };
   }, []);
 
@@ -229,17 +253,29 @@ export const VelocityCrash: React.FC<GameCommonProps> = ({
       </div>
 
       {/* Main Crash Canvas */}
-      <div className="relative overflow-hidden rounded-xl border border-slate-800 bg-[#0A0E14] p-4">
+      <div
+        className={`relative overflow-hidden rounded-xl border p-4 transition-all duration-300 ${
+          phase === 'CRASHED'
+            ? 'border-rose-500/60 bg-[radial-gradient(circle_at_50%_40%,rgba(244,63,94,0.16),rgba(10,14,20,1)_72%)]'
+            : phase === 'CASHED_OUT'
+            ? 'border-emerald-500/60 bg-[radial-gradient(circle_at_50%_40%,rgba(16,185,129,0.16),rgba(10,14,20,1)_72%)]'
+            : phase === 'FLYING' && multiplier >= 5
+            ? 'border-[#ECCB63]/80 bg-[radial-gradient(circle_at_50%_40%,rgba(212,175,55,0.2),rgba(10,14,20,1)_72%)] shadow-[0_0_40px_rgba(212,175,55,0.2)]'
+            : 'border-slate-800 bg-[#0A0E14]'
+        }`}
+      >
         <canvas ref={canvasRef} data-testid="crash-canvas" className="h-[340px] w-full rounded-lg" />
 
         {/* Center Multiplier Readout */}
         <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
           <div
-            className={`font-mono-num text-6xl font-bold tracking-tight sm:text-7xl ${
+            className={`font-mono-num text-6xl font-bold tracking-tight transition-transform duration-150 sm:text-7xl ${
               phase === 'CRASHED'
                 ? 'text-rose-500'
                 : phase === 'CASHED_OUT'
                 ? 'text-emerald-400'
+                : multiplier >= 5
+                ? 'scale-105 text-[#FEF08A] drop-shadow-[0_0_24px_rgba(236,203,99,0.55)]'
                 : 'text-[#F9E7A8]'
             }`}
           >

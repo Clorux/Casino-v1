@@ -41,6 +41,7 @@ export const GravityPlinko: React.FC<GameCommonProps> = ({
   const [risk, setRisk] = useState<PlinkoRisk>('medium');
   const [recentHits, setRecentHits] = useState<Array<{ id: number; mult: number; profit: number }>>([]);
   const [activeBucketFlash, setActiveBucketFlash] = useState<number | null>(null);
+  const [inFlightCount, setInFlightCount] = useState<number>(0);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ballsRef = useRef<ActiveBall[]>([]);
@@ -203,12 +204,23 @@ export const GravityPlinko: React.FC<GameCommonProps> = ({
             payout: b.payout,
             wasNearMiss: b.wasNearMiss,
             celebrateTier:
-              b.multiplier >= 30 ? 'MEGA' : b.multiplier >= 12 ? 'SUPER' : b.multiplier >= 5 ? 'BIG' : undefined,
+              b.multiplier >= 100
+                ? 'JACKPOT'
+                : b.multiplier >= 30
+                ? 'MEGA'
+                : b.multiplier >= 12
+                ? 'SUPER'
+                : b.multiplier >= 5
+                ? 'BIG'
+                : undefined,
             celebrateLabel: 'GRAVITY PLINKO',
           });
         } else {
           remaining.push(b);
         }
+      }
+      if (remaining.length !== ballsRef.current.length) {
+        setInFlightCount(remaining.length);
       }
       ballsRef.current = remaining;
 
@@ -231,6 +243,19 @@ export const GravityPlinko: React.FC<GameCommonProps> = ({
     rafRef.current = requestAnimationFrame(loop);
     return () => {
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
+      // Settle any in-flight balls on unmount so wagers never leak when switching games
+      if (ballsRef.current.length > 0) {
+        const pending = ballsRef.current;
+        ballsRef.current = [];
+        for (const b of pending) {
+          settleRef.current({
+            gameId: 'plinko',
+            bet: b.bet,
+            payout: b.payout,
+            wasNearMiss: b.wasNearMiss,
+          });
+        }
+      }
     };
   }, [drawFrame]);
 
@@ -253,6 +278,7 @@ export const GravityPlinko: React.FC<GameCommonProps> = ({
       lastRowSound: -1,
       color: risk === 'high' ? '#ECCB63' : risk === 'medium' ? '#34D399' : '#60A5FA',
     });
+    setInFlightCount(ballsRef.current.length);
   };
 
   return (
@@ -286,8 +312,9 @@ export const GravityPlinko: React.FC<GameCommonProps> = ({
               <button
                 key={r}
                 type="button"
+                disabled={inFlightCount > 0}
                 onClick={() => setRows(r)}
-                className={`font-mono-num rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors ${
+                className={`font-mono-num rounded-md px-2.5 py-1.5 text-xs font-semibold transition-colors disabled:opacity-45 ${
                   rows === r ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'
                 }`}
               >
